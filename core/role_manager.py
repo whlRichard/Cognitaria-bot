@@ -69,40 +69,46 @@ class RoleManager:
 
     async def create_or_update_role(self, guild: discord.Guild, user: discord.Member, colors_hex: list, role_name: str):
         """Creates or updates a user's color role and persists the ID."""
+        from discord.http import Route
         role = self.get_user_role(guild, user)
 
-        if len(colors_hex) >= 3:
-            final_colors = [discord.Color(c) for c in self.holographic_colors]
-            kwargs = {'name': role_name, 'colors': final_colors}
-        elif len(colors_hex) == 2:
-            final_colors = [self._hex_to_color(c) for c in colors_hex]
-            kwargs = {'name': role_name, 'colors': final_colors}
-        elif len(colors_hex) == 1:
-            final_color = self._hex_to_color(colors_hex[0])
-            kwargs = {'name': role_name, 'color': final_color}
-        else:
+        if not colors_hex:
             raise ValueError("必须提供至少一种颜色。")
 
+        # --- 准备颜色数据 ---
+        base_color = self._hex_to_color(colors_hex[0])
+        colors_payload = None
+
+        if len(colors_hex) >= 3:
+            final_colors = self.holographic_colors
+            colors_payload = {'primary_color': final_colors[0], 'secondary_color': final_colors[1], 'tertiary_color': final_colors[2]}
+        elif len(colors_hex) == 2:
+            final_colors = [self._hex_to_color(c).value for c in colors_hex]
+            colors_payload = {'primary_color': final_colors[0], 'secondary_color': final_colors[1]}
+
+        # --- 创建或更新角色 ---
         target_role = role
         if role:
             logger.info(f"正在为用户 {user.id} 更新角色 {role.id}...")
-            # 更新现有角色时，可以附带位置信息
+            edit_kwargs = {'name': role_name, 'color': base_color}
             try:
                 target_position = user.top_role.position + 1
                 bot_max_position = guild.me.top_role.position
                 if target_position >= bot_max_position:
                     target_position = bot_max_position - 1
-                kwargs['position'] = target_position
+                edit_kwargs['position'] = target_position
             except AttributeError:
                 logger.warning("无法确定用户或机器人的最高角色，将使用默认位置。")
             
-            await role.edit(**kwargs)
+            await role.edit(**edit_kwargs)
         else:
             logger.info(f"正在为用户 {user.id} 创建新角色...")
-            # 创建角色时，不能直接指定位置
-            new_role = await guild.create_role(**kwargs)
-            
-            # 创建后，再单独编辑其位置
+            # 1. 先用基础颜色创建
+            create_kwargs = {'name': role_name, 'color': base_color}
+            new_role = await guild.create_role(**create_kwargs)
+            target_role = new_role
+
+            # 2. 再调整位置
             try:
                 target_position = user.top_role.position + 1
                 bot_max_position = guild.me.top_role.position
@@ -110,14 +116,19 @@ class RoleManager:
                     target_position = bot_max_position - 1
                 await new_role.edit(position=target_position)
                 logger.info(f"已将角色 {new_role.name} 的位置调整到 {target_position}")
-            except AttributeError:
-                 logger.warning("无法确定用户或机器人的最高角色，将使用默认位置。")
             except Exception as e:
                 logger.error(f"调整角色位置时出错: {e}", exc_info=True)
 
+            # 3. 将角色赋予用户
             await user.add_roles(new_role)
-            target_role = new_role
         
+        # --- 如果需要，使用低级 API 更新多种颜色 ---
+        if target_role and colors_payload:
+            logger.info(f"正在为角色 {target_role.id} 更新多种颜色...")
+            route = Route('PATCH', '/guilds/{guild_id}/roles/{role_id}', guild_id=guild.id, role_id=target_role.id)
+            await self.bot.http.request(route, json={'colors': colors_payload})
+
+        # --- 保存配置 ---
         if target_role:
             guild_id_str = str(guild.id)
             user_id_str = str(user.id)

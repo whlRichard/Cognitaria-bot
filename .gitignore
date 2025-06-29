@@ -1,5 +1,6 @@
 # Environment variables and secrets
 .env
+bot token.txt
 # Log files
 *.log
 
