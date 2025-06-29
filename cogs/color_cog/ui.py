@@ -9,32 +9,42 @@ class RoleSettingsModal(discord.ui.Modal):
         super().__init__(title="创建/修改你的专属身份组")
         self.is_update = is_update
         self.original_message = original_message
-        # The modal will now correctly pre-fill the primary color if available.
-        # Joining the list with a comma, as the user might have multiple colors in theory,
-        # but we are only pre-filling one due to API limitations.
         colors_str = ", ".join(current_colors) if current_colors else ""
-        self.add_item(discord.ui.InputText(label="身份组名字", value=current_name or "", required=True))
-        self.add_item(discord.ui.InputText(label="身份组颜色 (HEX, e.g., #RRGGBB)", value=colors_str, required=True))
-        self.add_item(discord.ui.InputText(label="第二个颜色 (可选)", placeholder="e.g., #RRGGBB", required=False))
-        self.add_item(discord.ui.InputText(label="第三个颜色 (可选)", placeholder="e.g., #RRGGBB", required=False))
 
-    async def callback(self, interaction: discord.Interaction):
+        self.role_name = discord.ui.InputText(label="身份组名字", value=current_name or "", required=True)
+        self.primary_color = discord.ui.InputText(label="身份组颜色 (HEX, e.g., #RRGGBB)", value=colors_str, required=True)
+        self.secondary_color = discord.ui.InputText(label="第二个颜色 (可选)", placeholder="e.g., #RRGGBB", required=False)
+        self.tertiary_color = discord.ui.InputText(label="第三个颜色 (可选)", placeholder="e.g., #RRGGBB", required=False)
+        
+        self.add_item(self.role_name)
+        self.add_item(self.primary_color)
+        self.add_item(self.secondary_color)
+        self.add_item(self.tertiary_color)
+
+    async def on_submit(self, interaction: discord.Interaction):
         await interaction.response.defer()
-        self.stop()
-
         status_message = ""
         try:
             role_manager = interaction.client.role_manager
-            # Extract data from modal
-            role_name = self.children[0].value
-            colors_input = self.children[1].value.split(',')
-            colors_hex = [color.strip() for color in colors_input if color.strip()]
-            if self.children[2].value:
-                colors_hex.append(self.children[2].value.strip())
-            if self.children[3].value:
-                colors_hex.append(self.children[3].value.strip())
+            role_name = self.role_name.value
+            
+            # 检查是否输入了第三种颜色
+            if self.tertiary_color.value:
+                # 如果是，则强制使用全息颜色
+                colors_hex = [
+                    f"#{11127295:06x}",
+                    f"#{16759788:06x}",
+                    f"#{16761760:06x}"
+                ]
+            else:
+                # 否则，使用用户输入的颜色
+                colors_hex = [self.primary_color.value.strip()]
+                if self.secondary_color.value:
+                    colors_hex.append(self.secondary_color.value.strip())
+            
+            # 去重
             colors_hex = list(dict.fromkeys(colors_hex))
-
+            
             await role_manager.create_or_update_role(
                 guild=interaction.guild,
                 user=interaction.user,
@@ -57,7 +67,6 @@ class RoleSettingsModal(discord.ui.Modal):
                 description=new_description,
                 color=discord.Color.random()
             )
-            # Use followup to edit the message after a deferred response
             await interaction.followup.edit_message(self.original_message.id, embed=new_embed)
 
 
