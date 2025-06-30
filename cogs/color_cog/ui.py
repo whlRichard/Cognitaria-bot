@@ -21,7 +21,7 @@ class RoleSettingsModal(discord.ui.Modal):
         self.add_item(self.secondary_color)
         self.add_item(self.tertiary_color)
 
-    async def on_submit(self, interaction: discord.Interaction):
+    async def callback(self, interaction: discord.Interaction):
         await interaction.response.defer()
         status_message = ""
         try:
