@@ -14,7 +14,7 @@
 
 1.  在项目根目录下创建一个名为 `.env` 的文件，并填入你的 Discord Bot Token。这是一个模板：
     ```
-    TOKEN=YOUR_DISCORD_BOT_TOKEN_HERE
+    DISCORD_TOKEN=YOUR_DISCORD_BOT_TOKEN_HERE
     ```
 
 2.  使用 `pip` 安装所有依赖：
